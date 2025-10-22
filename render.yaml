@@ -1,13 +1,25 @@
-# ... inside your service block ...
+version: "1"
+services:
+- type: web
+  name: ICEBOYS-bot
+  runtime: docker
+  repo: https://github.com/IceReign-MEXT/ICEBOYS-bot
+  plan: free
   envVars:
-  - key: PORT
-    value: 5000
-  - key: RENDER_APP_NAME
-    value: ICEBOYS-bot # <--- IMPORTANT: This MUST MATCH your service name
-  - key: TELEGRAM_BOT_TOKEN
-    sync: false # Set the actual value on the Render Dashboard
-  - key: ADMIN_ID
-    sync: false # Set the actual value on the Render Dashboard
-  - key: DATABASE_URL
-    sync: false # Set the actual value on the Render Dashboard
-  # ... all other keys should be configured on the Dashboard ...
+    - key: TELEGRAM_BOT_TOKEN
+    - key: ADMIN_ID
+    - key: TREASURY_WALLET_ADDR
+    - key: ALCHEMY_API_URL
+    - key: DATABASE_URL
+    - key: PORT
+    - key: RENDER_APP_NAME
+    - key: BOT_NAME
+    - key: BOT_VERSION
+    - key: LOG_LEVEL
+    - key: SERVICE_MODE
+    - key: AUTO_RESTART
+  dockerCommand: python iceboys_monetizer.py
+  dockerContext: .
+  dockerfilePath: ./Dockerfile
+  autoDeployTrigger: "off"
+  rootDir: ./

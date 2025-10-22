@@ -1,33 +1,30 @@
-# Python cache / compiled files
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
-# Environment and secrets
-.env
-
-# Databases and logs
-*.db
 *.sqlite3
-*.log
 
-# OS files
-.DS_Store
-Thumbs.db
+# Environment
+.env
+.env.local
+*.key
+*.pem
+
+# Logs
+logs/
+*.log
 
 # Virtual environments
 venv/
-.env/
-env/
 .venv/
 
-# PyInstaller
-build/
-dist/
-*.spec
-
-# IDEs / Editors
+# IDE / Editor
 .vscode/
 .idea/
 *.swp
+*.swo
+
+# Docker
+*.dockerignore
+*.tar

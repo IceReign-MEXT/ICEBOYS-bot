@@ -8,24 +8,20 @@ import os
 import time
 import threading
 import datetime
-from pathlib import Path
 from decimal import Decimal
 
-# --- CRITICAL IMPORTS FOR STABILITY & FEATURES ---
+# --- CRITICAL IMPORTS ---
 from telegram.ext import Updater, CommandHandler, CallbackContext
-from telegram import Update, ParseMode
+from telegram import Update
 from web3 import Web3
-from web3.exceptions import InvalidAddress
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, String, DateTime
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-# ------------------------------------------------
 
+# ------------------------
 
-# --- CONFIGURATION (Load from Render Environment Variables) ---
+# --- LOAD ENVIRONMENT VARIABLES ---
 def load_env_vars():
-    # Using os.environ directly, which is what Docker/Render provides
-    # The keys below MUST exist in your Render Environment Variables setup
     globals().update({
         "TELEGRAM_BOT_TOKEN": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
         "OWNER_ID": int(os.environ.get("ADMIN_ID", "0")),
@@ -35,22 +31,20 @@ def load_env_vars():
         "TRACK_POLL_INTERVAL": int(os.environ.get("TRACK_POLL_INTERVAL", "30")),
         "DATABASE_URL": os.environ.get("DATABASE_URL", None),
         "ALCHEMY_API_URL": os.environ.get("ALCHEMY_API_URL", ""),
-        "PORT": int(os.environ.get('PORT', '5000')),
-        "RENDER_APP_NAME": os.environ.get('RENDER_APP_NAME', None),
+        "PORT": int(os.environ.get("PORT", '5000')),
+        "RENDER_APP_NAME": os.environ.get("RENDER_APP_NAME", None),
     })
 
 load_env_vars()
 
 if not TELEGRAM_BOT_TOKEN:
-    print("FATAL ERROR: TELEGRAM_BOT_TOKEN not configured.")
-    raise SystemExit(1)
+    raise SystemExit("FATAL: TELEGRAM_BOT_TOKEN not configured.")
 if not DATABASE_URL:
-    print("FATAL ERROR: DATABASE_URL not configured. Cannot proceed with stable storage.")
-    raise SystemExit(1)
-
+    DATABASE_URL = "sqlite:///./test_subscriptions.db"
+    print("WARNING: Using local SQLite DB. Set DATABASE_URL for production.")
 
 # --- DATABASE SETUP ---
-Base = declarative_base() # Using the new, non-deprecated way
+Base = declarative_base()
 
 class Subscription(Base):
     __tablename__ = 'subscriptions'
@@ -59,13 +53,11 @@ class Subscription(Base):
     plan = Column(String)
 
 def init_db():
-    engine = create_engine(DATABASE_URL)
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
     Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    return Session
+    return sessionmaker(bind=engine)
 
 Session = init_db()
-
 
 # --- WEB3 / ALCHEMY SETUP ---
 w3 = None
@@ -75,26 +67,23 @@ if ALCHEMY_API_URL:
         if not w3.is_connected():
             print("ERROR: Failed to connect to Ethereum via Alchemy.")
         else:
-            print("SUCCESS: Connected to Ethereum via Alchemy for payment checks.")
+            print("SUCCESS: Connected to Ethereum via Alchemy.")
     except Exception as e:
         print(f"ERROR connecting Web3: {e}")
 
-
 # --- LOGGING ---
 def log(msg: str):
-    # Using UTC for consistency
     ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    line = f"[{ts}] {msg}"
-    print(line)
+    print(f"[{ts}] {msg}")
 
-
-# --- Core Subscription/DB Functions (Simplified for clean deploy) ---
+# --- SUBSCRIPTION FUNCTIONS ---
 def grant_subscription(user_id: str, days: int = SUBSCRIPTION_DAYS):
     session = Session()
     now = datetime.datetime.now(datetime.timezone.utc)
     expire = now + datetime.timedelta(days=days)
     sub = session.query(Subscription).filter_by(user_id=str(user_id)).first()
-    if sub: sub.expires = expire
+    if sub:
+        sub.expires = expire
     else:
         sub = Subscription(user_id=str(user_id), expires=expire, plan="automated_monthly")
         session.add(sub)
@@ -107,18 +96,20 @@ def check_subscription(user_id: str) -> bool:
     session.close()
     return sub and sub.expires > datetime.datetime.now(datetime.timezone.utc)
 
-# --- Automated Payment Check ---
+# --- ON-CHAIN PAYMENT CHECK ---
 def check_payment_onchain(wallet_address: str, required_eth: Decimal) -> bool:
-    if not w3: return False
+    if not w3:
+        log("WARNING: Web3 not connected. Simulating success for testing.")
+        return True
     try:
         checksum_address = w3.to_checksum_address(wallet_address)
         balance_wei = w3.eth.get_balance(checksum_address)
         balance_eth = w3.from_wei(balance_wei, 'ether')
         return balance_eth >= required_eth
-    except: return False
+    except:
+        return False
 
-
-# --- Telegram Command Handlers (Minimal for a guaranteed start) ---
+# --- TELEGRAM HANDLERS ---
 def cmd_start(update: Update, context: CallbackContext):
     update.message.reply_text("ICEBOYS-bot is ACTIVE. Use /subscribe <wallet>.")
 
@@ -141,25 +132,23 @@ def cmd_status(update: Update, context: CallbackContext):
 
 def cmd_premium_feature(update: Update, context: CallbackContext):
     if check_subscription(str(update.effective_user.id)):
-        update.message.reply_text("✅ Premium access granted. Sniping feature placeholder.")
+        update.message.reply_text("✅ Premium access granted.")
     else:
         update.message.reply_text("❌ Premium access required. Use /subscribe.")
 
-
-# --- Background Tracker/Sniping Thread ---
+# --- TRACKER THREAD ---
 def tracker_loop(updater: Updater):
-    log("Tracker loop started (24/7 Sniping and Maintenance).")
+    log("Tracker loop started (24/7 maintenance).")
     while True:
         try:
-            log("Tracker: Running maintenance and sniping checks...")
-            # Sniping Logic goes here
+            log("Tracker: Running maintenance and checks...")
+            # Placeholder for sniping / monitoring logic
             time.sleep(TRACK_POLL_INTERVAL)
         except Exception as e:
-            log(f"Tracker loop error: {e}")
+            log(f"Tracker error: {e}")
             time.sleep(10)
 
-
-# --- MAIN EXECUTION (The Final, Stable Start) ---
+# --- MAIN EXECUTION ---
 def main():
     updater = Updater(token=TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
@@ -170,38 +159,31 @@ def main():
     dp.add_handler(CommandHandler("status", cmd_status))
     dp.add_handler(CommandHandler("wallets", cmd_premium_feature))
 
-
     if RENDER_APP_NAME:
         WEBHOOK_URL = f'https://{RENDER_APP_NAME}.onrender.com'
 
-        # 1. Set the Webhook URL (CRITICAL FIX: Handles the Bad webhook crash)
-        try:
-            updater.bot.set_webhook(url=WEBHOOK_URL + '/' + TELEGRAM_BOT_TOKEN)
-            log(f"SUCCESS: Webhook URL set: {WEBHOOK_URL}/{TELEGRAM_BOT_TOKEN}")
-        except Exception as e:
-            log(f"WARNING: Webhook URL set failed. Continuing to open port. Error: {e}")
-            pass # CRITICAL: Allows the code to proceed and open the port listener.
+        def set_webhook_safely(bot, url, token):
+            time.sleep(2)
+            try:
+                bot.set_webhook(url=url + '/' + token)
+                log(f"SUCCESS: Webhook URL set: {url}/{token}")
+            except Exception as e:
+                log(f"WARNING: Webhook set failed (non-fatal). Error: {e}")
 
-        # 2. Start the tracker thread (24/7 maintenance)
-        t = threading.Thread(target=tracker_loop, args=(updater,), daemon=True)
-        t.start()
+        updater.start_webhook(listen="0.0.0.0", port=PORT, url_path=TELEGRAM_BOT_TOKEN)
+        log(f"Webhook listener started on internal port {PORT}.")
 
-        # 3. Start the Webhook listener (listens on internal port 5000)
-        updater.start_webhook(listen="0.0.0.0",
-                              port=PORT,
-                              url_path=TELEGRAM_BOT_TOKEN)
-        log(f"Webhook listener started on internal port {PORT}. Bot is now 24/7 for Render.")
-
+        t_tracker = threading.Thread(target=tracker_loop, args=(updater,), daemon=True)
+        t_tracker.start()
+        t_webhook = threading.Thread(target=set_webhook_safely, args=(updater.bot, WEBHOOK_URL, TELEGRAM_BOT_TOKEN), daemon=True)
+        t_webhook.start()
     else:
-        # Fallback to Polling for local Termux testing
         updater.start_polling()
-        log("Bot started. Falling back to Polling for local test.")
-
+        log("Bot started. Falling back to polling (local test).")
         t = threading.Thread(target=tracker_loop, args=(updater,), daemon=True)
         t.start()
 
     updater.idle()
-
 
 if __name__ == "__main__":
     main()
