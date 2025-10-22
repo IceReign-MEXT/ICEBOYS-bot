@@ -1,0 +1,33 @@
+# Python cache / compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment and secrets
+.env
+
+# Databases and logs
+*.db
+*.sqlite3
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+venv/
+.env/
+env/
+.venv/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.swp
