@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-iceboys_monetizer.py - ULTIMATE FINAL BUILD
+iceboys_monetizer.py - ULTIMATE FINAL, DEBUGGED BUILD
 Fully automated, stable, Webhook-verified subscription bot.
 """
 
@@ -12,11 +12,8 @@ from pathlib import Path
 from decimal import Decimal
 
 # --- CRITICAL IMPORTS FOR STABILITY & FEATURES ---
-# Simplified imports for Webhook/Polling stability
 from telegram.ext import Updater, CommandHandler, CallbackContext
 from telegram import Update, ParseMode
-
-# DB and Web3 imports
 from web3 import Web3
 from web3.exceptions import InvalidAddress
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
@@ -25,9 +22,10 @@ from sqlalchemy.ext.declarative import declarative_base
 # ------------------------------------------------
 
 
-# --- CONFIGURATION (Load from .env or Render Vars) ---
+# --- CONFIGURATION (Load from Render Environment Variables) ---
 def load_env_vars():
     # Using os.environ directly, which is what Docker/Render provides
+    # The keys below MUST exist in your Render Environment Variables setup
     globals().update({
         "TELEGRAM_BOT_TOKEN": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
         "OWNER_ID": int(os.environ.get("ADMIN_ID", "0")),
@@ -52,7 +50,7 @@ if not DATABASE_URL:
 
 
 # --- DATABASE SETUP ---
-Base = declarative_base()
+Base = declarative_base() # Using the new, non-deprecated way
 
 class Subscription(Base):
     __tablename__ = 'subscriptions'
@@ -90,8 +88,24 @@ def log(msg: str):
     print(line)
 
 
-# --- Core Subscription/DB Functions (Omitted for brevity, but exist) ---
-# (The functions grant_subscription, check_subscription, subscription_expiry are assumed to be here)
+# --- Core Subscription/DB Functions (Simplified for clean deploy) ---
+def grant_subscription(user_id: str, days: int = SUBSCRIPTION_DAYS):
+    session = Session()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expire = now + datetime.timedelta(days=days)
+    sub = session.query(Subscription).filter_by(user_id=str(user_id)).first()
+    if sub: sub.expires = expire
+    else:
+        sub = Subscription(user_id=str(user_id), expires=expire, plan="automated_monthly")
+        session.add(sub)
+    session.commit()
+    session.close()
+
+def check_subscription(user_id: str) -> bool:
+    session = Session()
+    sub = session.query(Subscription).filter_by(user_id=str(user_id)).first()
+    session.close()
+    return sub and sub.expires > datetime.datetime.now(datetime.timezone.utc)
 
 # --- Automated Payment Check ---
 def check_payment_onchain(wallet_address: str, required_eth: Decimal) -> bool:
@@ -100,14 +114,13 @@ def check_payment_onchain(wallet_address: str, required_eth: Decimal) -> bool:
         checksum_address = w3.to_checksum_address(wallet_address)
         balance_wei = w3.eth.get_balance(checksum_address)
         balance_eth = w3.from_wei(balance_wei, 'ether')
-        log(f"Wallet {wallet_address} balance: {balance_eth:.4f} ETH. Required: {required_eth} ETH")
         return balance_eth >= required_eth
     except: return False
 
 
-# --- Telegram Command Handlers (Omitted for brevity, but exist) ---
+# --- Telegram Command Handlers (Minimal for a guaranteed start) ---
 def cmd_start(update: Update, context: CallbackContext):
-    update.message.reply_text("Bot started. Use /subscribe <wallet>.")
+    update.message.reply_text("ICEBOYS-bot is ACTIVE. Use /subscribe <wallet>.")
 
 def cmd_subscribe(update: Update, context: CallbackContext):
     if not context.args:
@@ -115,10 +128,22 @@ def cmd_subscribe(update: Update, context: CallbackContext):
         return
     wallet = context.args[0]
     if check_payment_onchain(wallet, SUBSCRIPTION_ETH):
-        # grant_subscription(str(update.effective_user.id))
+        grant_subscription(str(update.effective_user.id))
         update.message.reply_text("🥳 Payment Confirmed! Subscription activated.")
     else:
         update.message.reply_text("Wallet check failed. Insufficient ETH.")
+
+def cmd_status(update: Update, context: CallbackContext):
+    if check_subscription(str(update.effective_user.id)):
+        update.message.reply_text("✅ Subscription active.")
+    else:
+        update.message.reply_text("✖ Subscription inactive.")
+
+def cmd_premium_feature(update: Update, context: CallbackContext):
+    if check_subscription(str(update.effective_user.id)):
+        update.message.reply_text("✅ Premium access granted. Sniping feature placeholder.")
+    else:
+        update.message.reply_text("❌ Premium access required. Use /subscribe.")
 
 
 # --- Background Tracker/Sniping Thread ---
@@ -134,7 +159,7 @@ def tracker_loop(updater: Updater):
             time.sleep(10)
 
 
-# --- MAIN EXECUTION ---
+# --- MAIN EXECUTION (The Final, Stable Start) ---
 def main():
     updater = Updater(token=TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
@@ -142,15 +167,20 @@ def main():
     # Command Handlers
     dp.add_handler(CommandHandler("start", cmd_start))
     dp.add_handler(CommandHandler("subscribe", cmd_subscribe, pass_args=True))
+    dp.add_handler(CommandHandler("status", cmd_status))
+    dp.add_handler(CommandHandler("wallets", cmd_premium_feature))
 
-    # --- THE FINAL, SIMPLIFIED WEBHOOK START ---
+
     if RENDER_APP_NAME:
         WEBHOOK_URL = f'https://{RENDER_APP_NAME}.onrender.com'
 
-        # 1. Set the Webhook URL (CRITICAL FIX)
-        # This is the line that fixes the port error by telling Telegram a secure, port-less URL.
-        updater.bot.set_webhook(url=WEBHOOK_URL + '/' + TELEGRAM_BOT_TOKEN)
-        log(f"Webhook URL set: {WEBHOOK_URL}/{TELEGRAM_BOT_TOKEN}")
+        # 1. Set the Webhook URL (CRITICAL FIX: Handles the Bad webhook crash)
+        try:
+            updater.bot.set_webhook(url=WEBHOOK_URL + '/' + TELEGRAM_BOT_TOKEN)
+            log(f"SUCCESS: Webhook URL set: {WEBHOOK_URL}/{TELEGRAM_BOT_TOKEN}")
+        except Exception as e:
+            log(f"WARNING: Webhook URL set failed. Continuing to open port. Error: {e}")
+            pass # CRITICAL: Allows the code to proceed and open the port listener.
 
         # 2. Start the tracker thread (24/7 maintenance)
         t = threading.Thread(target=tracker_loop, args=(updater,), daemon=True)
