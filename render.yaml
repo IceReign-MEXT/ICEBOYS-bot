@@ -1,0 +1,13 @@
+# ... inside your service block ...
+  envVars:
+  - key: PORT
+    value: 5000
+  - key: RENDER_APP_NAME
+    value: ICEBOYS-bot # <--- IMPORTANT: This MUST MATCH your service name
+  - key: TELEGRAM_BOT_TOKEN
+    sync: false # Set the actual value on the Render Dashboard
+  - key: ADMIN_ID
+    sync: false # Set the actual value on the Render Dashboard
+  - key: DATABASE_URL
+    sync: false # Set the actual value on the Render Dashboard
+  # ... all other keys should be configured on the Dashboard ...
