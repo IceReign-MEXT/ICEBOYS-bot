@@ -1,6 +1,3 @@
-# nano Dockerfile
-# (PASTE THE CONTENT BELOW)
-
 # Use Python 3.12 slim as base
 FROM python:3.12-slim
 
@@ -9,6 +6,9 @@ WORKDIR /app
 
 # Copy project files
 COPY . .
+
+# Install build-essentials (CRITICAL FIX for compiling C extensions like lru-dict)
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
