@@ -3,7 +3,7 @@
 iceboys_monetizer.py - ULTIMATE FINAL, DEBUGGED BUILD
 Fully automated, stable, Webhook-verified subscription bot.
 """
-
+from db import grant_subscription, check_subscription
 import os
 import time
 import threading
